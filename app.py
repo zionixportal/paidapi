@@ -12,7 +12,7 @@ SESSION = os.environ.get("SESSION", "user_session")
 TARGET_BOT = "@crazy_num_info_bot"
 
 MAX_WAIT_SECONDS = 20   # max wait for reply
-POLL_INTERVAL = 1       # poll every 1 sec
+POLL_INTERVAL = 0.5      # poll every 1 sec
 # --------------------------------------
 
 app = Flask(__name__)
@@ -36,7 +36,7 @@ async def forward_to_target_and_get_reply(number: str):
 
         # Polling for reply
         for _ in range(int(MAX_WAIT_SECONDS / POLL_INTERVAL)):
-            messages = await tele_client.get_messages(TARGET_BOT, limit=20)
+            messages = await tele_client.get_messages(TARGET_BOT, limit=15)
             if messages and messages[0].from_id:  # ensure it's reply, not our own message
                 text = messages[0].text or "📎 Media reply"
                 if not text.startswith("/num"):   # ignore our own command
