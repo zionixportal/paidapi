@@ -1,6 +1,6 @@
 import asyncio
 from flask import Flask, request, jsonify
-from telethon import TelegramClient, events
+from telethon import TelegramClient
 from telethon.errors import FloodWaitError
 import json
 import os
@@ -10,12 +10,13 @@ API_ID = int(os.environ.get("API_ID", 0))
 API_HASH = os.environ.get("API_HASH", "")
 SESSION = os.environ.get("SESSION", "user_session")
 TARGET_BOT = "@crazy_num_info_bot"
-REPLY_TIMEOUT = 15  # seconds
+MAX_WAIT_SECONDS = 20  # Maximum time to wait for Telegram reply
+POLL_INTERVAL = 0.5    # Check every 0.5 seconds
 # --------------------------------------
 
 app = Flask(__name__)
 
-# Create explicit loop for Python 3.12 compatibility
+# Create explicit loop for Python 3.12+ compatibility
 loop = asyncio.new_event_loop()
 asyncio.set_event_loop(loop)
 
@@ -29,22 +30,19 @@ async def forward_to_target_and_get_reply(number: str):
 
     try:
         await tele_client.send_message(TARGET_BOT, f"/num {number}")
-        all_msgs = []
 
-        @tele_client.on(events.NewMessage(from_users=TARGET_BOT))
-        async def handler(event):
-            all_msgs.append(event.message)
+        # Polling instead of sleeping
+        total_polls = int(MAX_WAIT_SECONDS / POLL_INTERVAL)
+        for _ in range(total_polls):
+            messages = await tele_client.get_messages(TARGET_BOT, limit=1)
+            if messages:
+                return [messages[0].text or "📎 Media reply"], None
+            await asyncio.sleep(POLL_INTERVAL)
 
-        await asyncio.sleep(REPLY_TIMEOUT)
-        tele_client.remove_event_handler(handler)
-
-        if not all_msgs:
-            return None, "⚠️ Timeout: Target bot ne reply nahi diya."
-
-        return [m.text or "📎 Media reply" for m in all_msgs], None
+        return None, f"⚠️ Timeout: Target bot did not reply within {MAX_WAIT_SECONDS} seconds."
 
     except FloodWaitError as fe:
-        return None, f"⏳ Flood wait: {fe.seconds} sec rukna padega."
+        return None, f"⏳ Flood wait: {fe.seconds} sec pause required."
     except Exception as e:
         return None, f"❌ Error: {e}"
 
@@ -55,12 +53,10 @@ def num_lookup():
     if not number:
         return jsonify({"error": "⚠️ Missing 'number' param"}), 400
 
-    # Forward to target bot
     replies, err = loop.run_until_complete(forward_to_target_and_get_reply(number))
     if err:
         return jsonify({"error": err}), 500
 
-    # Try parsing JSON if target bot returns JSON string
     final_result = []
     for r in replies:
         try:
@@ -83,5 +79,5 @@ if __name__ == "__main__":
         print("✅ Telethon client started")
 
     loop.run_until_complete(init_client())
-    # Debug Flask server (not used in Render)
+    # Debug Flask server (not for production on Render)
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
