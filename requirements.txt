@@ -1,4 +1,5 @@
 Flask==2.3.3
 telethon==1.29.0
-imghdr
-gunicorn
+requests==2.31.0   # if needed
+gunicorn           # for Render
+
